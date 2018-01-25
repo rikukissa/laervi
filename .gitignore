@@ -106,4 +106,4 @@ ENV/
 *.dat
 
 # Temporary file for storing face data
-faces.npy
+encodings.npy
