@@ -8,7 +8,7 @@ import threading
 import cv2
 import numpy as np
 import dlib
-
+import json
 import utils
 
 win = dlib.image_window()
@@ -74,10 +74,9 @@ def webcam():
     video_capture.grab()
     if (not IDENTIFYING):
       ret, frame = video_capture.retrieve()
+      if (not ret):
+        raise Exception('No frame received!')
 
-      if (ret == False):
-        print('No frame')
-        break
       IDENTIFYING = True
 
       thread = threading.Thread(target=handle_frame, args=(frame, (lambda res: logger(res, frame))))
@@ -88,21 +87,25 @@ def webcam():
   video_capture.release()
 
 
-def logger(faces, frame):
+def logger(matches, frame):
   win.set_image(frame)
-  if len(faces) > 0:
+  if len(matches) > 0:
     win.clear_overlay()
 
-  for _, (_, _, face_vector) in enumerate(faces):
+  for _, (_, _, face_vector) in enumerate(matches):
     win.add_overlay(face_vector)
+
+  def match_to_json(match):
+    return { 'id': match[0], 'confidence': match[1] }
+
+  print(json.dumps(list(map(match_to_json, matches))))
 
 def load_enrolled_faces():
   global enrolled_faces
   enrolled_faces = np.load('encodings.npy').item()
 
 if not os.path.isfile('encodings.npy'):
-  print("No encodings.npy file found! Create it by running create-face-encodings")
+  utils.eprint("No encodings.npy file found! Create it by running create-face-encodings")
 else:
-  print('Loading enrolled faces from encodings.npy')
   load_enrolled_faces()
   webcam()
