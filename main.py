@@ -6,8 +6,10 @@ import numpy as np
 import time
 import threading
 import glob
-
+import traceback
 from skimage import io
+
+win = dlib.image_window()
 
 face_recognition = dlib.face_recognition_model_v1('./dlib_face_recognition_resnet_model_v1.dat')
 face_detector = dlib.get_frontal_face_detector()
@@ -39,47 +41,51 @@ def image_from_file(path):
 def identify(image):
   # Get all faces
   faces = faces_from_image(image)
-  # Pick largest face
-  face = faces[0] if faces else None
-  
-  # Calculate face descriptor
-  descriptor = face_recognition.compute_face_descriptor(image, face)
-  face_vector = np.array(descriptor).astype(float)
 
-  # THIS is probably hazardous as ordering may not be always the same?
-  enroll_identifiers = np.array(list(enrolled_faces.keys()))
-  enroll_matrix = np.array(list(enrolled_faces.values()))
+  def find_match(face):
+    # Calculate face descriptor
+    descriptor = face_recognition.compute_face_descriptor(image, face)
+    face_vector = np.array(descriptor).astype(float)
 
-  # Calculate differences between the face and all enrolled faces
-  differences = np.subtract(np.array(enroll_matrix), face_vector)
-  distances = np.linalg.norm(differences, axis=1)
-  # and pick the closest one
-  closest_index = np.argmin(distances)
+    # THIS is probably hazardous as ordering may not be always the same?
+    enroll_identifiers = np.array(list(enrolled_faces.keys()))
+    enroll_matrix = np.array(list(enrolled_faces.values()))
 
-  return enroll_identifiers[closest_index], distances[closest_index]
+    # Calculate differences between the face and all enrolled faces
+    differences = np.subtract(np.array(enroll_matrix), face_vector)
+    distances = np.linalg.norm(differences, axis=1)
+    # and pick the closest one
+    closest_index = np.argmin(distances)
+
+    return enroll_identifiers[closest_index], distances[closest_index], face
+
+  return map(find_match, faces)
+
 
 
 def handle_frame(origFrame, cb):
   global identifying
   try:
     frame = cv2.resize(origFrame, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_CUBIC)
-
     start = time.time()
-    identifier, distance = identify(frame)
-    if (distance < 0.6):
-       cb(identifier, distance, time.time() - start)
-    else:
-       cb('-', distance, time.time() - start)
+
+    identified_matches = identify(frame)
+
+    valid_matches = list(filter((lambda match: match[1] < 0.6), identified_matches))
+
+    cb(valid_matches)
+
     sys.stdout.flush()
 
   except Exception as e:
     exc = e
+    print(e)
     cb(None, 0, time.time() - start)
     # print(e)
 
   identifying = False
 
-def webcam(cb):
+def webcam():
   global identifying
 
   video_capture = cv2.VideoCapture(0)
@@ -94,7 +100,7 @@ def webcam(cb):
         break
       identifying = True
 
-      thread = threading.Thread(target=handle_frame, args=(frame, cb))
+      thread = threading.Thread(target=handle_frame, args=(frame, (lambda res: logger(res, frame))))
       thread.daemon=True
       thread.start()
 
@@ -116,18 +122,17 @@ def enroll_face(image, name):
   enrolled_faces[name] = face_vector
   # save npy file
 
-def logger(identifier, distance, duration):
-  if (identifier == '-'):
-    print('Unknown person', duration)
-  elif (identifier == None):
-    print('No face', duration)
-  else:
-    print(identifier, distance, duration)
+def logger(faces, frame):
+  win.set_image(frame)
+  if len(faces) > 0:
+    win.clear_overlay()
+
+  for i, (_, _, face_vector) in enumerate(faces):
+    win.add_overlay(face_vector)
 
 def enrollImages():
   print('Enrolling all images')
   for filename in glob.glob('faces/*.jpg'):
-    print(filename)
     name = filename.split('/')[1].split('.')[0]
     image = image_from_file(filename)
     enroll_face(image, name)
@@ -140,4 +145,4 @@ else:
   print('Loading enrolled faces from faces.npy')
   load_enrolled_faces()
 
-webcam(logger)
+webcam()
