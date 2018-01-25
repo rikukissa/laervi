@@ -29,10 +29,15 @@ def main():
 
   encodings = {}
 
-  for filename in files:
+  for i, filename in enumerate(files):
     identifier = filename.split('/')[1].split('.')[0]
-    image = io.imread(filename)
-    encodings[identifier] = create_encoding(image)
+    try:
+      image = io.imread(filename)
+      encodings[identifier] = create_encoding(image)
+      print(i, "/", len(files), "Created encoding for", filename)
+    except:
+      utils.eprint(i, "/", len(files), "Could not create an encoding for", filename)
+      pass
 
   np.save('encodings.npy', encodings)
 
