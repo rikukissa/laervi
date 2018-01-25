@@ -1,13 +1,15 @@
+# -*- coding: utf-8 -*-
+# pylint: disable=missing-docstring
+
 import os
 import sys
-import cv2
-import dlib
-import numpy as np
 import time
 import threading
 import glob
-import traceback
+import cv2
+import numpy as np
 from skimage import io
+import dlib
 
 win = dlib.image_window()
 
@@ -17,21 +19,21 @@ shape_predictor = dlib.shape_predictor('./shape_predictor_68_face_landmarks.dat'
 
 enrolled_faces = {}
 
-# Semaphor for identifying thread
-identifying = False
+# Semaphor for IDENTIFYING thread
+IDENTIFYING = False
 
 def face_to_vector(image, face):
   return (
-    np
-    .array(face_recognition.compute_face_descriptor(image, face))
-    .astype(float)
+      np
+      .array(face_recognition.compute_face_descriptor(image, face))
+      .astype(float)
   )
 
 def faces_from_image(image):
-  UPSAMPLING_FACTOR = 0
+  upsampling_factor = 0
   faces = [
-    (face.height() * face.width(), shape_predictor(image, face))
-    for face in face_detector(image, UPSAMPLING_FACTOR)
+      (face.height() * face.width(), shape_predictor(image, face))
+      for face in face_detector(image, upsampling_factor)
   ]
   return [face for _, face in sorted(faces, reverse=True)]
 
@@ -64,7 +66,7 @@ def identify(image):
 
 
 def handle_frame(origFrame, cb):
-  global identifying
+  global IDENTIFYING
   try:
     frame = cv2.resize(origFrame, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_CUBIC)
     start = time.time()
@@ -83,22 +85,22 @@ def handle_frame(origFrame, cb):
     cb(None, 0, time.time() - start)
     # print(e)
 
-  identifying = False
+  IDENTIFYING = False
 
 def webcam():
-  global identifying
+  global IDENTIFYING
 
   video_capture = cv2.VideoCapture(0)
 
   while True:
     video_capture.grab()
-    if (not identifying):
+    if (not IDENTIFYING):
       ret, frame = video_capture.retrieve()
 
       if (ret == False):
         print('No frame')
         break
-      identifying = True
+      IDENTIFYING = True
 
       thread = threading.Thread(target=handle_frame, args=(frame, (lambda res: logger(res, frame))))
       thread.daemon=True
@@ -127,10 +129,10 @@ def logger(faces, frame):
   if len(faces) > 0:
     win.clear_overlay()
 
-  for i, (_, _, face_vector) in enumerate(faces):
+  for _, (_, _, face_vector) in enumerate(faces):
     win.add_overlay(face_vector)
 
-def enrollImages():
+def enroll_images():
   print('Enrolling all images')
   for filename in glob.glob('faces/*.jpg'):
     name = filename.split('/')[1].split('.')[0]
@@ -139,8 +141,8 @@ def enrollImages():
   np.save('faces.npy', enrolled_faces)
   print('Saved faces.npy')
 
-if (not os.path.isfile('faces.npy')):
-    enrollImages()
+if not os.path.isfile('faces.npy'):
+  enroll_images()
 else:
   print('Loading enrolled faces from faces.npy')
   load_enrolled_faces()
